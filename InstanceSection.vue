@@ -161,7 +161,8 @@
             :selectedOption="selectedOption"
             :bidstenders= bidstenders
             :title="title"
-            @changeBids="handleChangeBids"/>
+            @changeBids="handleChangeBids"
+            @syncClicked="syncInstance(details.instancename,$event.bidsOrTenders)"/>
         </div>
     <div style="height: 5em;"></div> 
     </div>
@@ -205,6 +206,21 @@
         };
     },
     methods: {
+        async syncInstance(instancename,bidsOrTenders) {
+      try {
+        // Send instancename to the backend
+        console.log('Instance name from parameter:', instancename,bidsOrTenders);
+    
+
+        // Log the instancename directly from details (if available)
+        console.log('Instance name from details:', this.details.instancename,bidsOrTenders);
+        const response = await axios.post(`${BASE_URL3}/api/sync-instance`, { instancename, bidsOrTenders });
+        console.log('Sync successful:', response.data);
+      } catch (error) {
+        console.error('Error syncing instance:', error);
+      }
+    }
+  ,
         giveIlink(state) {
             return 'src/assets/' + state + '.png';
         },
