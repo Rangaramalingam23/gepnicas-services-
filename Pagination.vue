@@ -33,11 +33,11 @@
     </div>
 
     <!-- Sync button, appears only on Sync Pending page -->
-    <div v-if="title === 'Sync Pending'" class="sync-container" style="padding-left: 64em; margin-bottom: 10px;">
+    <!-- <div v-if="title === 'Sync Pending'" class="sync-container" style="padding-left: 64em; margin-bottom: 10px;">
       <button @click="syncAllSelected" class="btn btn-sm btn-outline-primary">
         Sync Selected Rows
       </button>
-    </div>
+    </div> -->
 
     <!-- Table -->
     <b-table
@@ -51,14 +51,16 @@
     >
       <!-- Header for Select All Column (checkbox and sync) -->
       <template #head(checkbox)="data">
-        <span v-if="showCheckBoxSync">Select All</span>
-        <input 
-          type="checkbox" 
-          v-model="selectAll"
-          @change="toggleSelectAll"
-          v-if="showCheckBoxSync"
-        />
-      </template>
+      <span v-if="showCheckBoxSync" class="select-all-label">Select All</span>
+      <input 
+      type="checkbox" 
+      v-model="selectAll"
+      @change="toggleSelectAll"
+      v-if="showCheckBoxSync"
+      class="select-all-checkbox"
+      />
+     </template>
+
 
       <!-- Header for Sync/Meta Data/Soft Link Column -->
       <template #head(sync)="data">
@@ -68,6 +70,7 @@
           :src="syncIcon"
           alt="Sync All"
           class="sync-icon-header"
+         
         />
 
         <span v-if="title === 'Meta Data Pending'">Create Meta Data</span>
@@ -106,7 +109,7 @@
           :src="syncIcon"
           alt="Sync Row"
           class="sync-icon-row"
-          @click="syncRow(data.item)"
+          @click="handleSync"
         />
         <img
           v-if="title === 'Meta Data Pending'"
@@ -220,6 +223,10 @@ export default {
     },
   },
   methods: {
+    handleSync() {
+      console.log(this.selectedOption)
+      this.$emit('syncClicked',{ bidsOrTenders: this.selectedOption });
+    },
     currentPageChanged(page) {
       this.$emit("update:currentPage", page);
     },
@@ -281,4 +288,11 @@ export default {
   margin-left: 8px;
   cursor: pointer;
 }
+
+.select-all-label {
+  margin-right: 8px; /* Adjust the value for desired spacing */
+}
+
+
+
 </style>
