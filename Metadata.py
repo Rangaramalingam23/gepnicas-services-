@@ -47,11 +47,13 @@ def fetch_data():
         
         cursor.execute(query)
         data = cursor.fetchall()
+        logging.info("Fetched data from gepnicas_bids_tenders_master")
         cursor.close()
         conn.close()
         return data
     except Exception as e:
         logging.error(f"Error fetching data: {e}")
+        return []
 
 def get_md5sum(ssh, file_path):
     try:
@@ -60,6 +62,7 @@ def get_md5sum(ssh, file_path):
         return md5sum_result
     except Exception as e:
         logging.error(f"Error getting MD5 sum for file {file_path}: {e}")
+        return None
 
 def process_and_insert_data(folders):
     try:
@@ -78,12 +81,18 @@ def process_and_insert_data(folders):
             for datafile in datafiles:
                 file_path = os.path.join(datafolder, datafile)
                 md5_value = get_md5sum(ssh, file_path)
-                
+                if md5_value is None:
+                    continue
+
                 insert_query = '''
                 INSERT INTO datamd5 (datafolder, datafiles, md5value)
                 VALUES (%s, %s, %s);
                 '''
-                cursor.execute(insert_query, (datafolder, datafile, md5_value))
+                try:
+                    cursor.execute(insert_query, (datafolder, datafile, md5_value))
+                    logging.info(f"Inserted data into datamd5: {datafolder}, {datafile}, {md5_value}")
+                except Exception as e:
+                    logging.error(f"Error inserting data into datamd5: {e}")
             
             # Repeat for archivefolder
             stdin, stdout, stderr = ssh.exec_command(f"ls {archivefolder}")
@@ -92,12 +101,18 @@ def process_and_insert_data(folders):
             for archivefile in archivefiles:
                 file_path = os.path.join(archivefolder, archivefile)
                 md5_value = get_md5sum(ssh, file_path)
-                
+                if md5_value is None:
+                    continue
+
                 insert_query = '''
                 INSERT INTO archivemd5 (archivefolder, archivefiles, md5value)
                 VALUES (%s, %s, %s);
                 '''
-                cursor.execute(insert_query, (archivefolder, archivefile, md5_value))
+                try:
+                    cursor.execute(insert_query, (archivefolder, archivefile, md5_value))
+                    logging.info(f"Inserted data into archivemd5: {archivefolder, archivefile, md5_value}")
+                except Exception as e:
+                    logging.error(f"Error inserting data into archivemd5: {e}")
         
         conn.commit()
         cursor.close()
@@ -117,12 +132,14 @@ def sort_table(table_name):
         
         cursor.execute(query)
         sorted_data = cursor.fetchall()
+        logging.info(f"Sorted data in table {table_name}")
         cursor.close()
         conn.close()
         
         return sorted_data
     except Exception as e:
         logging.error(f"Error sorting table {table_name}: {e}")
+        return []
 
 def compare_and_update_status():
     try:
@@ -134,9 +151,11 @@ def compare_and_update_status():
         
         cursor.execute(query_datamd5)
         datamd5_data = cursor.fetchall()
+        logging.info("Fetched data from datamd5")
         
         cursor.execute(query_archivemd5)
         archivemd5_data = cursor.fetchall()
+        logging.info("Fetched data from archivemd5")
         
         data_md5_dict = {}
         archive_md5_dict = {}
@@ -166,7 +185,11 @@ def compare_and_update_status():
                     WHERE datafolder = %s
                     RETURNING instancename, foldertype;
                     '''
-                    cursor.execute(update_query, (folder,))
+                    try:
+                        cursor.execute(update_query, (folder,))
+                        logging.info(f"Updated md5checkstatus to md5ok for {folder}")
+                    except Exception as e:
+                        logging.error(f"Error updating md5checkstatus to md5ok for {folder}: {e}")
                 else:
                     update_query = '''
                     UPDATE gepnicas_bids_tenders_master 
@@ -174,7 +197,11 @@ def compare_and_update_status():
                     WHERE datafolder = %s
                     RETURNING instancename, foldertype;
                     '''
-                    cursor.execute(update_query, (folder,))
+                    try:
+                        cursor.execute(update_query, (folder,))
+                        logging.info(f"Updated md5checkstatus to md5Mismatch and archivestatus to SyncPending for {folder}")
+                    except Exception as e:
+                        logging.error(f"Error updating md5checkstatus to md5Mismatch and archivestatus to SyncPending for {folder}: {e}")
                 
                 instancename, foldertype = cursor.fetchone()
                 
@@ -185,22 +212,34 @@ def compare_and_update_status():
                     INSERT INTO gepnicas_source_metadata (instancename, foldertype, datafolder, archivefolder, datafiles, md5value, unique_key)
                     VALUES (%s, %s, %s, %s, %s, %s, %s);
                     '''
-                    cursor.execute(insert_query, (instancename, foldertype, folder, archive_md5_dict[folder], file, data_md5_dict[folder][file], unique_key))
+                    try:
+                        cursor.execute(insert_query, (instancename, foldertype, folder, archive_md5_dict[folder], file, data_md5_dict[folder][file], unique_key))
+                        logging.info(f"Inserted data into gepnicas_source_metadata: {instancename}, {foldertype}, {folder}, {archive_md5_dict[folder]}, {file}, {data_md5_dict[folder][file]}, {unique_key}")
+                    except Exception as e:
+                        logging.error(f"Error inserting data into gepnicas_source_metadata: {e}")
                 
                 # Insert into gepnicas_archive_metadata
                 for file in archive_md5_dict[folder]:
                     metadatastatus_query = '''
                     SELECT metadatastatus FROM gepnicas_bids_tenders_master WHERE archivefolder = %s;
                     '''
-                    cursor.execute(metadatastatus_query, (folder,))
-                    metadatastatus = cursor.fetchone()[0]
+                    try:
+                        cursor.execute(metadatastatus_query, (folder,))
+                        metadatastatus = cursor.fetchone()[0]
+                    except Exception as e:
+                        logging.error(f"Error fetching metadatastatus for {folder}: {e}")
+                        continue
                     
                     unique_key = archive_md5_dict[folder][file] + folder + file
                     insert_query = '''
                     INSERT INTO gepnicas_archive_metadata (archivefolder, archivefiles, md5value, metadatastatus, unique_key)
                     VALUES (%s, %s, %s, %s, %s);
                     '''
-                    cursor.execute(insert_query, (folder, file, archive_md5_dict[folder][file], metadatastatus, unique_key))
+                    try:
+                        cursor.execute(insert_query, (folder, file, archive_md5_dict[folder][file], metadatastatus, unique_key))
+                        logging.info(f"Inserted data into gepnicas_archive_metadata: {folder}, {file}, {archive_md5_dict[folder][file]}, {metadatastatus}, {unique_key}")
+                    except Exception as e:
+                        logging.error(f"Error inserting data into gepnicas_archive_metadata: {e}")
         
         conn.commit()
         cursor.close()
