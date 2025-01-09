@@ -163,16 +163,44 @@ def compare_and_update_status():
                     update_query = '''
                     UPDATE gepnicas_bids_tenders_master 
                     SET md5checkstatus = 'md5ok' 
-                    WHERE datafolder = %s;
+                    WHERE datafolder = %s
+                    RETURNING instancename, foldertype;
                     '''
                     cursor.execute(update_query, (folder,))
                 else:
                     update_query = '''
                     UPDATE gepnicas_bids_tenders_master 
                     SET md5checkstatus = 'md5Mismatch', archivestatus = 'SyncPending' 
-                    WHERE datafolder = %s;
+                    WHERE datafolder = %s
+                    RETURNING instancename, foldertype;
                     '''
                     cursor.execute(update_query, (folder,))
+                
+                instancename, foldertype = cursor.fetchone()
+                
+                # Insert into gepnicas_source_metadata
+                for file in data_md5_dict[folder]:
+                    unique_key = data_md5_dict[folder][file] + folder + file
+                    insert_query = '''
+                    INSERT INTO gepnicas_source_metadata (instancename, foldertype, datafolder, archivefolder, datafiles, md5value, unique_key)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s);
+                    '''
+                    cursor.execute(insert_query, (instancename, foldertype, folder, archive_md5_dict[folder], file, data_md5_dict[folder][file], unique_key))
+                
+                # Insert into gepnicas_archive_metadata
+                for file in archive_md5_dict[folder]:
+                    metadatastatus_query = '''
+                    SELECT metadatastatus FROM gepnicas_bids_tenders_master WHERE archivefolder = %s;
+                    '''
+                    cursor.execute(metadatastatus_query, (folder,))
+                    metadatastatus = cursor.fetchone()[0]
+                    
+                    unique_key = archive_md5_dict[folder][file] + folder + file
+                    insert_query = '''
+                    INSERT INTO gepnicas_archive_metadata (archivefolder, archivefiles, md5value, metadatastatus, unique_key)
+                    VALUES (%s, %s, %s, %s, %s);
+                    '''
+                    cursor.execute(insert_query, (folder, file, archive_md5_dict[folder][file], metadatastatus, unique_key))
         
         conn.commit()
         cursor.close()
@@ -185,9 +213,17 @@ def run_tasks():
     try:
         folders = fetch_data()
         process_and_insert_data(folders)
-        sorted_datamd5 = sort_table('datamd5')
-        sorted_archivemd5 = sort_table('archivemd5')
+        
+        # Sort datamd5 and archivemd5 tables
+        sort_table('datamd5')
+        sort_table('archivemd5')
+        
         compare_and_update_status()
+        
+        # Sort gepnicas_source_metadata and gepnicas_archive_metadata tables
+        sort_table('gepnicas_source_metadata')
+        sort_table('gepnicas_archive_metadata')
+
         logging.info("Process completed successfully.")
         return {"status": "success", "message": "Process completed successfully."}
     except Exception as e:
@@ -195,4 +231,4 @@ def run_tasks():
         return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
-    app.run(host=os.getenv('FLASK_HOST'), port=int(os.getenv('FLASK_PORT', 5000)), debug = True)
+    app.run(host=os.getenv('FLASK_HOST'), port=8020, debug=True)
